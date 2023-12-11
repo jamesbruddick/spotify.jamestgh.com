@@ -1,14 +1,14 @@
 $(document).ready(function() {
 	let ws, refreshTimeout;
 
-	function msToMinSec(ms) {
-		const seconds = Math.floor(ms / 1000), remainingSeconds = seconds % 60;
-		return `${Math.floor(seconds / 60)}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+	function getSpotifyDataAtInterval(requestType, requestInterval) {
+		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: requestType }));
+		refreshTimeout = setTimeout(() => getSpotifyDataAtInterval(requestType, requestInterval), requestInterval);
 	}
 
-	function getPlaybackState(interval) {
-		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'get-playback-state' }));
-		refreshTimeout = setTimeout(() => getPlaybackState(interval), interval);
+	function msToMinSec(ms) {
+		const msToSec = ms / 1000, seconds = Math.floor(msToSec % 60);
+		return `${Math.floor(msToSec / 60)}:${seconds < 10 ? '0' : ''}${seconds}`;
 	}
 	
 	function displayPlaybackState(data) {
@@ -20,12 +20,17 @@ $(document).ready(function() {
 		$('#track-time').text(`${msToMinSec(data.progress_ms)}/${msToMinSec(data.item.duration_ms)}`)
 	}
 
+	function displayRecentlyPlayedTracks(data) {
+
+	}
+
 	function connectWebSocket() {
 		ws = new WebSocket(`wss://${window.location.hostname}`);
 
 		ws.addEventListener('open', (event) => {
 			console.log('WS Connected!');
-			getPlaybackState(1e3);
+			getSpotifyDataAtInterval('get-playback-state', 1e3)
+			getSpotifyDataAtInterval('get-recently-played-tracks', 1e3)
 		});
 
 		ws.addEventListener('message', (event) => {
@@ -33,11 +38,15 @@ $(document).ready(function() {
 			if (response.data.status !== 'error') {
 				switch (response.type) {
 					case 'get-playback-state':
-						console.log(response.data);
+						// console.log(response.data);
 						displayPlaybackState(response.data);
 						break;
+					case 'get-recently-played-tracks':
+						// console.log(response.data);
+						displayRecentlyPlayedTracks(response.data);
+						break;
 					case 'get-track':
-						console.log(response.data);
+						// console.log(response.data);
 						break;
 				}
 			} else {
