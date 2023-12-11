@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import express from 'express';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import { CronJob } from 'cron';
 
@@ -56,19 +56,26 @@ wss.on('connection', async (ws, req) => {
 
 	console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) connected`);
 
+	setInterval(() => {
+		if (ws.readyState === WebSocket.OPEN) ws.ping();
+	}, 2e4);
+
 	ws.on('message', async (message) => {
 		const request = JSON.parse(message);
 		switch (request.type) {
-			case 'get-recently-played-tracks':
-				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify`);
-				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN) }));
-				break;
 			case 'get-playback-state':
-				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify`);
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
 				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData('https://api.spotify.com/v1/me/player', SPOTIFY_ACCESSTOKEN) }));
 				break;
+			case 'get-recently-played-tracks':
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
+				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN) }));
+				break;
+			case 'get-track':
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
+				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData(`https://api.spotify.com/v1/tracks/${request.data}`, SPOTIFY_ACCESSTOKEN) }));
+				break;
 		}
-
 	});
 
 	ws.on('close', () => {
@@ -129,7 +136,7 @@ app.get('/callback', async (req, res) => {
 				await setAccessToken();
 				res.redirect('/');
 			} else {
-				throw new Error('failed to request the access_token from spotify web api');
+				throw new Error('failed to request the access_token from spotify-web-api');
 			}
 		} catch (error) {
 			console.error(`[${new Date().toISOString()}]: ${error.message}`);
@@ -174,13 +181,13 @@ new CronJob('*/15 * * * *', async () => {
 					await setAccessToken();
 					return;
 				} else {
-					throw new Error('failed to refresh the access_token for spotify web api');
+					throw new Error('failed to refresh the access_token for spotify-web-api');
 				}
 			} catch (error) {
 				console.error(`[${new Date().toISOString()}]: ${error.message}`);
 			}
 		} else {
-			throw new Error(`authorize spotify web api at https://${__dirname.split('/').pop()}/login`);
+			throw new Error(`authorize spotify-web-api at https://${__dirname.split('/').pop()}/login`);
 		}
 	} catch (error) {
 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
