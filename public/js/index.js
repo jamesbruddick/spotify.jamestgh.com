@@ -5,6 +5,18 @@ function getPlaybackState(refreshInterval) {
 	}, refreshInterval);
 }
 
+function displayPlaybackState(data) {
+	$('#album-href').attr('href', data.item.album.external_urls.spotify);
+	$('#album-image').attr('src', data.item.album.images[1].url);
+	$('#track-href').attr('href', data.item.external_urls.spotify);
+	$('#track-name').text(data.item.name);
+	let artists = [];
+	for(const artist of data.item.artists) {
+		artists.push(artist.name);
+	}
+	$('#track-artists').text(artists.join(', '));
+}
+
 $(document).ready(function() {
 	function connectWebSocket() {
 		ws = new WebSocket(`wss://${window.location.hostname}`);
@@ -16,22 +28,18 @@ $(document).ready(function() {
 
 		ws.addEventListener('message', (event) => {
 			const response = JSON.parse(event.data);
-			switch (response.type) {
-				case 'get-playback-state':
-					console.log(response.data);
-					$('#album-href').attr('href', response.data.item.album.external_urls.spotify);
-					$('#album-image').attr('src', response.data.item.album.images[1].url);
-					$('#track-href').attr('href', response.data.item.external_urls.spotify);
-					$('#track-name').text(response.data.item.name);
-					let artists = [];
-					for(const artist of response.data.item.artists) {
-						artists.push(artist.name);
-					}
-					$('#track-artists').text(artists.join(', '));
-					break;
-				case 'get-track':
-					console.log(response.data);
-					break;
+			if (response.data.status !== 'error') {
+				switch (response.type) {
+					case 'get-playback-state':
+						console.log(response.data);
+						displayPlaybackState(response.data);
+						break;
+					case 'get-track':
+						console.log(response.data);
+						break;
+				}
+			} else {
+				console.error(response.data.message);
 			}
 		});
 

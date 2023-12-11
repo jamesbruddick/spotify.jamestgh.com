@@ -44,9 +44,14 @@ async function getSpotifyData(spotifyUrl, accessToken) {
 	const requestOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } };
 	try {
 		const requestResponse = await fetch(spotifyUrl, requestOptions);
-		return requestResponse.json();
+		if (requestResponse.status === 200) {
+			return await requestResponse.json();
+		} else {
+			throw new Error(`spotify-web-api status code ${requestResponse.status}`);
+		}
 	} catch (error) {
 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		return { status: 'error', message: error.message };
 	}
 }
 
@@ -64,15 +69,15 @@ wss.on('connection', async (ws, req) => {
 		const request = JSON.parse(message);
 		switch (request.type) {
 			case 'get-playback-state':
-				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from spotify-web-api`);
 				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData('https://api.spotify.com/v1/me/player', SPOTIFY_ACCESSTOKEN) }));
 				break;
 			case 'get-recently-played-tracks':
-				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from spotify-web-api`);
 				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN) }));
 				break;
 			case 'get-track':
-				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting '${request.type}' from spotify-web-api`);
+				console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from spotify-web-api`);
 				ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData(`https://api.spotify.com/v1/tracks/${request.data}`, SPOTIFY_ACCESSTOKEN) }));
 				break;
 		}
