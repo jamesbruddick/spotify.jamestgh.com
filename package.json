@@ -1,0 +1,17 @@
+{
+  "name": "spotify.jamestgh.com",
+  "version": "1.0.0",
+  "description": "Spotify Web App by JamesTGH",
+  "homepage": "https://github.com/JamesTGH/spotify.jamestgh.com",
+  "license": "UNLICENSED",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "cron": "^3.1.6",
+    "express": "^4.18.2",
+    "mongodb": "^6.3.0",
+    "ws": "^8.15.0"
+  }
+}
