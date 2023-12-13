@@ -12,12 +12,12 @@ $(document).ready(function() {
 	}
 	
 	function displayPlaybackState(data) {
-		$('#album-href').attr('href', data.item.album.external_urls.spotify);
-		$('#album-image').attr('src', data.item.album.images[1].url);
-		$('#track-href').attr('href', data.item.external_urls.spotify);
-		$('#track-name').text(data.item.name);
+		$('#album-image').attr('href', data.item.album.external_urls.spotify);
+		$('#album-image > img').attr('src', data.item.album.images[1].url);
+		$('#track-name > a').attr('href', data.item.external_urls.spotify).text(data.item.name);
 		$('#track-artists').text(data.item.artists.map(artist => artist.name).join(', '));
-		$('#track-time').text(`${msToMinSec(data.progress_ms)}/${msToMinSec(data.item.duration_ms)}`)
+		$('#track-progress').attr('aria-valuenow', Math.round((data.progress_ms / data.item.duration_ms) * 100)).css('width', `${Math.round((data.progress_ms / data.item.duration_ms) * 100)}%`);
+		$('#track-time').text(`${msToMinSec(data.progress_ms)} / ${msToMinSec(data.item.duration_ms)}`)
 	}
 
 	function displayRecentlyPlayedTracks(data) {

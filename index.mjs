@@ -56,7 +56,7 @@ async function getSpotifyData(spotifyUrl, requestType, accessToken) {
 			}
 			return responseJson;
 		} else {
-			throw new Error(`spotify-web-api status code ${requestResponse.status}`);
+			throw new Error(`at function getSpotifyData() spotify-web-api errored with status code ${requestResponse.status}`);
 		}
 	} catch (error) {
 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
@@ -64,34 +64,29 @@ async function getSpotifyData(spotifyUrl, requestType, accessToken) {
 	}
 }
 
-async function getSpotifyDataAtInterval(spotifyUrl, accessToken, requestType, requestInterval) {
+async function getSpotifyDataAtInterval(spotifyUrl, accessToken, requestType) {
 	const requestOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } };
-	setInterval(async () => {
-		try {
-			const requestResponse = await fetch(spotifyUrl, requestOptions);
-			if (requestResponse.status === 200) {
-				const responseJson = await requestResponse.json();
-				switch (requestType) {
-					case 'get-playback-state':
-						await mongo.db('Spotify').collection(requestType).updateOne({}, { $set: responseJson }, { upsert: true });
-						break;
-					case 'get-recently-played-tracks':
-						await mongo.db('Spotify').collection(requestType).updateOne({}, { $set: responseJson }, { upsert: true });
-						break;
-				}
-				return responseJson;
-			} else {
-				throw new Error(`spotify-web-api status code ${requestResponse.status}`);
-			}
-		} catch (error) {
-			console.error(`[${new Date().toISOString()}]: ${error.message}`);
-			return { status: 'error', message: error.message };
+	try {
+		const requestResponse = await fetch(spotifyUrl, requestOptions);
+		if (requestResponse.status === 200) {
+			const responseJson = await requestResponse.json();
+			await mongo.db('Spotify').collection(requestType).updateOne({}, { $set: responseJson }, { upsert: true });
+		} else {
+			throw new Error(`at function getSpotifyDataAtInterval() spotify-web-api errored with status code ${requestResponse.status}`);
 		}
-	}, requestInterval);
+	} catch (error) {
+		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		return { status: 'error', message: error.message };
+	}
 }
 
-await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player', SPOTIFY_ACCESSTOKEN, 'get-playback-state', 500);
-await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN, 'get-recently-played-tracks', 500);
+setInterval(async () => {
+	await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player', SPOTIFY_ACCESSTOKEN, 'get-playback-state');
+}, 500);
+
+setInterval(async () => {
+	await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN, 'get-recently-played-tracks');
+}, 1000);
 
 wss.on('connection', async (ws, req) => {
 	const clientId = generateRandomId(16);
@@ -155,7 +150,7 @@ app.get('/login', (req, res) => {
 		client_id: SPOTIFY_CLIENTID,
 		response_type: 'code',
 		redirect_uri: `https://${__dirname.split('/').pop()}/callback`,
-		scope: 'user-read-currently-playing user-read-playback-state user-read-recently-played'
+		scope: 'user-read-playback-state user-modify-playback-state user-read-currently-playing user-read-recently-played'
 	});
 	res.redirect(`https://accounts.spotify.com/authorize?${params.toString()}`);
 });
@@ -206,7 +201,7 @@ process.on('SIGINT', () => {
 	process.exit(0);
 });
 
-new CronJob('*/15 * * * *', async () => {
+new CronJob('*/10 * * * *', async () => {
 	try {
 		const spotifyTokens = await mongo.db('Spotify').collection('tokens').findOne();
 		if (spotifyTokens) {
@@ -228,7 +223,7 @@ new CronJob('*/15 * * * *', async () => {
 						}
 					}, { upsert: true });
 					await setAccessToken();
-					return;
+					console.log(`[${new Date().toISOString()}]: successfully refreshed the access_token for spotify-web-api`);
 				} else {
 					throw new Error('failed to refresh the access_token for spotify-web-api');
 				}
