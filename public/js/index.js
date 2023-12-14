@@ -1,57 +1,71 @@
 $(document).ready(function() {
-	let ws, refreshTimeout;
-
-	function getSpotifyDataAtInterval(requestType, requestInterval) {
-		if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: requestType }));
-		refreshTimeout = setTimeout(() => getSpotifyDataAtInterval(requestType, requestInterval), requestInterval);
-	}
+	let ws, refreshTimeout, playbackTrackProgress;
 
 	function msToMinSec(ms) {
-		const msToSec = ms / 1000, seconds = Math.floor(msToSec % 60);
+		const msToSec = ms / 1000;
+		const seconds = Math.floor(msToSec % 60);
 		return `${Math.floor(msToSec / 60)}:${seconds < 10 ? '0' : ''}${seconds}`;
 	}
 	
-	function displayPlaybackState(data) {
-		$('#album-image').attr('href', data.item.album.external_urls.spotify);
-		$('#album-image > img').attr('src', data.item.album.images[1].url);
+	function displayCurrentlyPlaying(data) {
+		let trackProgress = data.progress_ms;
+
+		if (playbackTrackProgress) {
+			clearInterval(playbackTrackProgress);
+			playbackTrackProgress = null;
+		}
+
+		const updateTrackProgress = () => {
+			const progressPercentage = Math.round((trackProgress / data.item.duration_ms) * 100);
+			$('#track-progress').attr('aria-valuenow', progressPercentage).css('width', `${progressPercentage}%`);
+		
+			const trackTimeText = `${msToMinSec(trackProgress)} / ${msToMinSec(data.item.duration_ms)}`;
+			$('#track-time').text(trackTimeText);
+		};
+		
+		if (data.is_playing) {
+			playbackTrackProgress = setInterval(() => {
+				trackProgress += 10;
+				updateTrackProgress();
+			}, 10);
+		} else {
+			updateTrackProgress();
+		}
+		
+		$('#album-image').attr('src', data.item.album.images[1].url);
 		$('#track-name > a').attr('href', data.item.external_urls.spotify).text(data.item.name);
-		$('#track-artists').text(data.item.artists.map(artist => artist.name).join(', '));
-		$('#track-progress').attr('aria-valuenow', Math.round((data.progress_ms / data.item.duration_ms) * 100)).css('width', `${Math.round((data.progress_ms / data.item.duration_ms) * 100)}%`);
-		$('#track-time').text(`${msToMinSec(data.progress_ms)} / ${msToMinSec(data.item.duration_ms)}`)
+		$("#track-artists").html(data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', '));
 	}
 
-	function displayRecentlyPlayedTracks(data) {
-
+	function displayRecentlyPlayed(data) {
+		$("#recently-played > tr").remove();
+		data.forEach(track => {
+			$('#recently-played').append($('<tr>').append(`
+				<td>${(new Date(track.played_at)).toLocaleString()}</td>
+				<td>${track.track.name}</td>
+				<td>${track.track.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
+				<td>${track.track.album.name}</td>
+			`));
+		});
 	}
 
 	function connectWebSocket() {
 		ws = new WebSocket(`wss://${window.location.hostname}`);
 
 		ws.addEventListener('open', (event) => {
-			console.log('WS Connected!');
-			getSpotifyDataAtInterval('get-playback-state', 1e3)
-			getSpotifyDataAtInterval('get-recently-played-tracks', 1e3)
+			// console.log('WS Connected!');
 		});
 
 		ws.addEventListener('message', (event) => {
 			const response = JSON.parse(event.data);
-			if (response.data.status !== 'error') {
 				switch (response.type) {
-					case 'get-playback-state':
-						// console.log(response.data);
-						displayPlaybackState(response.data);
+					case 'spotify-currently-playing':
+						displayCurrentlyPlaying(response.data);
 						break;
-					case 'get-recently-played-tracks':
-						// console.log(response.data);
-						displayRecentlyPlayedTracks(response.data);
-						break;
-					case 'get-track':
-						// console.log(response.data);
+					case 'spotify-recently-played-tracks':
+						displayRecentlyPlayed(response.data);
 						break;
 				}
-			} else {
-				console.error(response.data.message);
-			}
 		});
 
 		ws.addEventListener('error', (event) => {
@@ -59,7 +73,7 @@ $(document).ready(function() {
 		});
 
 		ws.addEventListener('close', (event) => {
-			console.log('WS Disconnected! Attempting to reconnect...');
+			// console.log('WS Disconnected! Attempting to reconnect...');
 			clearTimeout(refreshTimeout);
 			setTimeout(connectWebSocket, 4e3);
 		});

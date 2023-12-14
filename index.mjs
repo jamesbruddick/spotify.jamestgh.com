@@ -21,7 +21,7 @@ const mongo = new MongoClient(MONGODB, { serverApi: ServerApiVersion.v1 });
 
 async function setAccessToken() {
 	try {
-		const spotifyTokens = await mongo.db('Spotify').collection('tokens').findOne();
+		const spotifyTokens = await mongo.db('Spotify').collection('spotify-tokens').findOne();
 		if (spotifyTokens) {
 			SPOTIFY_ACCESSTOKEN = spotifyTokens.access_token;
 			return;
@@ -40,23 +40,27 @@ function generateRandomId(length) {
 	return Array.from({ length }, () => characters[Math.floor(Math.random() * characters.length)]).join('');
 }
 
+const wssClients = new Set();
+
+let spotifyCurrentlyPlaying;
+
 async function getSpotifyData(spotifyUrl, requestType, accessToken) {
 	const requestOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } };
 	try {
-		const requestResponse = await fetch(spotifyUrl, requestOptions);
-		if (requestResponse.status === 200) {
-			const responseJson = await requestResponse.json();
+		const spotifyResponse = await fetch(spotifyUrl, requestOptions);
+		if (spotifyResponse.status === 200) {
+			const spotifyJson = await spotifyResponse.json();
 			switch (requestType) {
-				case 'get-playback-state':
-					await mongo.db('Spotify').collection(requestType).updateOne({}, { $set: { data: responseJson, timestamp: Date.now() } }, { upsert: true });
+				case 'spotify-recently-played-tracks':
+					await mongo.db('Spotify').collection(requestType).updateOne({ played_at: spotifyJson.items[0].played_at }, { $set: spotifyJson.items[0] }, { upsert: true });
 					break;
-				case 'get-track':
-					await mongo.db('Spotify').collection(requestType).insertOne(responseJson);
-					break;
+				// case 'get-track':
+				// 	await mongo.db('Spotify').collection(requestType).insertOne(spotifyJson);
+				// 	break;
 			}
-			return responseJson;
+			return spotifyJson;
 		} else {
-			throw new Error(`at function getSpotifyData() spotify-web-api errored with status code ${requestResponse.status}`);
+			throw new Error(`${requestType} using function getSpotifyData() with spotify-web-api errored with status code ${requestResponse.status}`);
 		}
 	} catch (error) {
 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
@@ -64,66 +68,81 @@ async function getSpotifyData(spotifyUrl, requestType, accessToken) {
 	}
 }
 
-async function getSpotifyDataAtInterval(spotifyUrl, accessToken, requestType) {
-	const requestOptions = { method: 'GET', headers: { 'Authorization': `Bearer ${accessToken}` } };
+setInterval(async () => {
 	try {
-		const requestResponse = await fetch(spotifyUrl, requestOptions);
-		if (requestResponse.status === 200) {
-			const responseJson = await requestResponse.json();
-			await mongo.db('Spotify').collection(requestType).updateOne({}, { $set: responseJson }, { upsert: true });
-		} else {
-			throw new Error(`at function getSpotifyDataAtInterval() spotify-web-api errored with status code ${requestResponse.status}`);
+		const spotifyResponse = await fetch('https://api.spotify.com/v1/me/player/currently-playing', { method: 'GET', headers: { 'Authorization': `Bearer ${SPOTIFY_ACCESSTOKEN}` } });
+		if (!spotifyResponse.ok) throw new Error(`spotify-web-api errored with status code ${spotifyResponse.status}`);
+		const spotifyData = await spotifyResponse.json();
+		try {
+			await mongo.db('Spotify').collection('spotify-currently-playing').updateOne({}, { $set: spotifyData }, { upsert: true });
+		} catch (error) {
+			throw error;
+		}
+		if (spotifyCurrentlyPlaying === undefined) spotifyCurrentlyPlaying = spotifyData;
+		if (spotifyData.timestamp !== spotifyCurrentlyPlaying.timestamp) {
+			spotifyCurrentlyPlaying = spotifyData;
+			try {
+				await getSpotifyData('https://api.spotify.com/v1/me/player/recently-played?limit=1', 'spotify-recently-played-tracks', SPOTIFY_ACCESSTOKEN);
+			} catch (error) {
+				throw error;
+			}
+			wssClients.forEach(async wsClient => {
+				if (wsClient.readyState === WebSocket.OPEN) {
+					wsClient.send(JSON.stringify({ type: 'spotify-currently-playing', data: spotifyData }));
+					wsClient.send(JSON.stringify({ type: 'spotify-recently-played-tracks', data: await mongo.db('Spotify').collection('spotify-recently-played-tracks').find({}).sort({ played_at: -1 }).toArray() }));
+				}
+			});
 		}
 	} catch (error) {
-		console.error(`[${new Date().toISOString()}]: ${error.message}`);
-		return { status: 'error', message: error.message };
+		try {
+			await mongo.db('Spotify').collection('spotify-currently-playing').updateOne({}, { $set: { is_playing: false } }, { upsert: true });
+		} catch (error) {
+			console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		}
+		wssClients.forEach(async wsClient => {
+			if (wsClient.readyState === WebSocket.OPEN) {
+				wsClient.send(JSON.stringify({ type: 'spotify-currently-playing', data: await mongo.db('Spotify').collection('spotify-currently-playing').findOne() }));
+			}
+		});
+		if (!error.message.includes('Unexpected end of JSON input')) console.error(`[${new Date().toISOString()}]: ${error.message}`);
 	}
-}
-
-setInterval(async () => {
-	await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player', SPOTIFY_ACCESSTOKEN, 'get-playback-state');
-}, 500);
-
-setInterval(async () => {
-	await getSpotifyDataAtInterval('https://api.spotify.com/v1/me/player/recently-played', SPOTIFY_ACCESSTOKEN, 'get-recently-played-tracks');
 }, 1000);
 
 wss.on('connection', async (ws, req) => {
-	const clientId = generateRandomId(16);
-	const clientIp = req.headers['x-forwarded-for'].split(',')[0].trim();
+	wssClients.add(ws);
+	const wssClientId = generateRandomId(16);
+	const wssClientIp = req.headers['x-forwarded-for'].split(',')[0].trim();
 
-	console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) connected`);
+	console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) connected`);
 
 	setInterval(() => {
 		if (ws.readyState === WebSocket.OPEN) ws.ping();
 	}, 2e4);
 
+	if (ws.readyState === WebSocket.OPEN) {
+		ws.send(JSON.stringify({ type: 'spotify-currently-playing', data: await mongo.db('Spotify').collection('spotify-currently-playing').findOne() }));
+		ws.send(JSON.stringify({ type: 'spotify-recently-played-tracks', data: await mongo.db('Spotify').collection('spotify-recently-played-tracks').find({}).sort({ played_at: -1 }).toArray() }));
+	}
+
 	ws.on('message', async (message) => {
 		const request = JSON.parse(message);
 		switch (request.type) {
-			case 'get-playback-state':
-				// console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from mongodb-cache`);
-				ws.send(JSON.stringify({ type: request.type, data: await mongo.db('Spotify').collection(request.type).findOne() }));
-				break;
-			case 'get-recently-played-tracks':
-				// console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from mongodb-cache`);
-				ws.send(JSON.stringify({ type: request.type, data: await mongo.db('Spotify').collection(request.type).findOne() }));
-				break;
-			case 'get-track':
-				const mongoTrack = await mongo.db('Spotify').collection(request.type).findOne({ id: request.data });
-				if (mongoTrack) {
-					console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from mongodb-cache`);
-					ws.send(JSON.stringify({ type: request.type, data: mongoTrack }));
-				} else {
-					console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) is requesting ${request.type} from spotify-web-api`);
-					ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData(`https://api.spotify.com/v1/tracks/${request.data}`, request.type, SPOTIFY_ACCESSTOKEN) }));
-				}
-				break;
+			// case 'get-track':
+			// 	const mongoTrack = await mongo.db('Spotify').collection(request.type).findOne({ id: request.data });
+			// 	if (mongoTrack) {
+			// 		console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) is requesting ${request.type} from mongodb-cache`);
+			// 		ws.send(JSON.stringify({ type: request.type, data: mongoTrack }));
+			// 	} else {
+			// 		console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) is requesting ${request.type} from spotify-web-api`);
+			// 		ws.send(JSON.stringify({ type: request.type, data: await getSpotifyData(`https://api.spotify.com/v1/tracks/${request.data}`, request.type, SPOTIFY_ACCESSTOKEN) }));
+			// 	}
+			// 	break;
 		}
 	});
 
 	ws.on('close', () => {
-		console.log(`[${new Date().toISOString()}]: ${clientIp} websocket client (${clientId}) disconnected`);
+		wssClients.delete(ws);
+		console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) disconnected`);
 	});
 });
 
@@ -170,11 +189,10 @@ app.get('/callback', async (req, res) => {
 			const requestResponse = await fetch('https://accounts.spotify.com/api/token', requestOptions);
 			if (requestResponse.ok) {
 				const data = await requestResponse.json();
-				await mongo.db('Spotify').collection('tokens').updateOne({}, {
+				await mongo.db('Spotify').collection('spotify-tokens').updateOne({}, {
 					$set: {
 						access_token: data.access_token,
-						refresh_token: data.refresh_token,
-						scope: data.scope
+						refresh_token: data.refresh_token
 					}
 				}, { upsert: true });
 				await setAccessToken();
@@ -201,9 +219,9 @@ process.on('SIGINT', () => {
 	process.exit(0);
 });
 
-new CronJob('*/10 * * * *', async () => {
+new CronJob('*/5 * * * *', async () => {
 	try {
-		const spotifyTokens = await mongo.db('Spotify').collection('tokens').findOne();
+		const spotifyTokens = await mongo.db('Spotify').collection('spotify-tokens').findOne();
 		if (spotifyTokens) {
 			const requestOptions = {
 				method: 'POST',
@@ -217,7 +235,7 @@ new CronJob('*/10 * * * *', async () => {
 				const requestResponse = await fetch('https://accounts.spotify.com/api/token', requestOptions);
 				if (requestResponse.ok) {
 					const data = await requestResponse.json();
-					await mongo.db('Spotify').collection('tokens').updateOne({}, {
+					await mongo.db('Spotify').collection('spotify-tokens').updateOne({}, {
 						$set: {
 							access_token: data.access_token
 						}
