@@ -37,17 +37,17 @@ $(document).ready(function() {
 		$("#track-artists").html(data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', '));
 	}
 
-	function displayRecentlyPlayed(data) {
-		$("#recently-played > tr").remove();
-		data.forEach(track => {
-			$('#recently-played').append($('<tr>').append(`
-				<td>${(new Date(track.played_at)).toLocaleString()}</td>
-				<td>${track.track.name}</td>
-				<td>${track.track.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
-				<td>${track.track.album.name}</td>
-			`));
-		});
-	}
+	// function displayRecentlyPlayed(data) {
+	// 	$("#recently-played > tr").remove();
+	// 	data.forEach(track => {
+	// 		$('#recently-played').append($('<tr>').append(`
+	// 			<td>${(new Date(track.played_at)).toLocaleString()}</td>
+	// 			<td><a href="${track.track.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.track.name}</a></td>
+	// 			<td>${track.track.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
+	// 			<td><a href="${track.track.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.track.album.name}</a></td>
+	// 		`));
+	// 	});
+	// }
 
 	function connectWebSocket() {
 		ws = new WebSocket(`wss://${window.location.hostname}`);
@@ -62,9 +62,9 @@ $(document).ready(function() {
 					case 'spotify-currently-playing':
 						displayCurrentlyPlaying(response.data);
 						break;
-					case 'spotify-recently-played-tracks':
-						displayRecentlyPlayed(response.data);
-						break;
+					// case 'spotify-recently-played-tracks':
+					// 	displayRecentlyPlayed(response.data);
+					// 	break;
 				}
 		});
 
