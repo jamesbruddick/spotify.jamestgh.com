@@ -25,9 +25,9 @@ $(document).ready(function() {
 		
 		if (data.is_playing) {
 			playbackTrackProgress = setInterval(() => {
-				trackProgress += 10;
+				trackProgress += 100;
 				updateTrackProgress();
-			}, 10);
+			}, 100);
 		} else {
 			updateTrackProgress();
 		}
@@ -37,17 +37,25 @@ $(document).ready(function() {
 		$("#track-artists").html(data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', '));
 	}
 
-	// function displayRecentlyPlayed(data) {
-	// 	$("#recently-played > tr").remove();
-	// 	data.forEach(track => {
-	// 		$('#recently-played').append($('<tr>').append(`
-	// 			<td>${(new Date(track.played_at)).toLocaleString()}</td>
-	// 			<td><a href="${track.track.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.track.name}</a></td>
-	// 			<td>${track.track.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
-	// 			<td><a href="${track.track.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.track.album.name}</a></td>
-	// 		`));
-	// 	});
-	// }
+	function displayPlayerHistory(data) {
+		data.forEach(track => {
+			$('#recently-played').append($('<tr>').append(`
+				<td>${(new Date(track.timestamp)).toLocaleString()}</td>
+				<td><a href="${track.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.name}</a></td>
+				<td>${track.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
+				<td><a href="${track.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.album.name}</a></td>
+			`));
+		});
+	}
+
+	function displayPlayerHistoryUpdate(data) {
+		$('#recently-played').prepend($('<tr>').prepend(`
+			<td>${(new Date(data.timestamp)).toLocaleString()}</td>
+			<td><a href="${data.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.name}</a></td>
+			<td>${data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
+			<td><a href="${data.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.album.name}</a></td>
+		`));
+	}
 
 	function connectWebSocket() {
 		ws = new WebSocket(`wss://${window.location.hostname}`);
@@ -62,9 +70,12 @@ $(document).ready(function() {
 					case 'spotify-currently-playing':
 						displayCurrentlyPlaying(response.data);
 						break;
-					// case 'spotify-recently-played-tracks':
-					// 	displayRecentlyPlayed(response.data);
-					// 	break;
+					case 'spotify-player-history':
+						displayPlayerHistory(response.data);
+						break;
+					case 'spotify-player-history-update':
+						displayPlayerHistoryUpdate(response.data);
+						break;
 				}
 		});
 

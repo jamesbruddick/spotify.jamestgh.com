@@ -82,6 +82,38 @@ async function setSpotifyAuthorizationTokens() {
 await setSpotifyAuthorizationTokens();
 setInterval(setSpotifyAuthorizationTokens, 60e3);
 
+async function saveSpotifyPlayerHistory() {
+	try {
+		const spotifyLastPlayed = await mongo.db('spotify').collection('spotify-player-history').findOne({}, { sort: { timestamp: -1 } });
+
+		if (spotifyLastPlayed === null) {
+			try {
+				await mongo.db('spotify').collection('spotify-player-history').insertOne({
+					item: SPOTIFY_CURRENTLYPLAYING.item,
+					timestamp: SPOTIFY_CURRENTLYPLAYING.timestamp
+				});
+			} catch (error) {
+				console.error(`[${new Date().toISOString()}]: ${error.message}`);
+				throw new Error(`Failed to save currently playing from Spotify WEB API to MongoDB for spotify-player-history`);
+			}
+		} else {
+			if (SPOTIFY_CURRENTLYPLAYING.item.uri != spotifyLastPlayed.item.uri) {
+				try {
+					await mongo.db('spotify').collection('spotify-player-history').insertOne({
+						item: SPOTIFY_CURRENTLYPLAYING.item,
+						timestamp: SPOTIFY_CURRENTLYPLAYING.timestamp
+					});
+				} catch (error) {
+					console.error(`[${new Date().toISOString()}]: ${error.message}`);
+					throw new Error(`Failed to save currently playing from Spotify WEB API to MongoDB for spotify-player-history`);
+				}
+			}
+		}
+	} catch (error) {
+		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+	}
+}
+
 async function setSpotifyCurrentlyPlaying() {
 	try {
 		const requestOptions = {
@@ -93,12 +125,13 @@ async function setSpotifyCurrentlyPlaying() {
 
 		if (spotifyResponse.ok && spotifyResponse.status === 200) {
 			SPOTIFY_CURRENTLYPLAYING = await spotifyResponse.json();
+			await saveSpotifyPlayerHistory();
 		} else if (spotifyResponse.ok) {
 			throw new Error(`Failed to get currently playing from Spotify WEB API (${spotifyResponse.statusText})`);
 		}
 	} catch (error) {
 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
-		return setTimeout(setSpotifyCurrentlyPlaying, 20e3);
+		return setTimeout(setSpotifyCurrentlyPlaying, 5e3);
 	}
 	setTimeout(setSpotifyCurrentlyPlaying, 1e3);
 }
@@ -125,9 +158,18 @@ wss.on('connection', async (ws, req) => {
 	}, 2e4);
 
 	if (ws.readyState === WebSocket.OPEN) {
-		setInterval(() => {
-			ws.send(JSON.stringify({ type: 'spotify-currently-playing', data: SPOTIFY_CURRENTLYPLAYING }));
-		}, 1e3);
+		setInterval(() => { ws.send(JSON.stringify({ type: 'spotify-currently-playing', data: SPOTIFY_CURRENTLYPLAYING })) }, 1e3);
+		ws.send(JSON.stringify({ type: 'spotify-player-history', data: await mongo.db('spotify').collection('spotify-player-history').find({}).sort({ timestamp: -1 }).toArray() }));
+	}
+
+	try {
+		const spotifyPlayerHistoryUpdate = await mongo.db('spotify').collection('spotify-player-history').watch();
+
+		spotifyPlayerHistoryUpdate.on('change', (change) => {
+			if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'spotify-player-history-update', data: change.fullDocument }));
+		});
+	} catch (error) {
+		console.error(`[${new Date().toISOString()}]: ${error.message}`);
 	}
 
 	ws.on('error', (error) => {
@@ -145,14 +187,13 @@ wss.on('error', (error) => {
 
 app.locals.pretty = true;
 app.set('trust proxy', true);
-app.set('json spaces', 2);
+// app.set('json spaces', 2);
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.disable('x-powered-by');
 
 app.get('/', async (req, res) => {
 	res.sendFile(__dirname + '/views/index.html');
-	// res.json(SPOTIFY_CURRENTLYPLAYING);
 });
 
 app.get('/login', (req, res) => {
@@ -193,10 +234,10 @@ app.get('/callback', async (req, res) => {
 					res.redirect('/');
 				} catch (error) {
 					console.error(`[${new Date().toISOString()}]: ${error.message}`);
-					throw new Error('failed to save the access_token and refresh_token from spotify-web-api to mongodb');
+					throw new Error('Failed to save the access_token and refresh_token from Spotify Web API to MongoDB');
 				}
 			} else {
-				throw new Error('failed to request the access_token and refresh_token from spotify-web-api');
+				throw new Error('Failed to request the access_token and refresh_token from Spotify Web API');
 			}
 		} catch (error) {
 			console.error(`[${new Date().toISOString()}]: ${error.message}`);
