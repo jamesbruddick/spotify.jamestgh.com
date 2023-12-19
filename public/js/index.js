@@ -25,9 +25,9 @@ $(document).ready(function() {
 		
 		if (data.is_playing) {
 			playbackTrackProgress = setInterval(() => {
-				trackProgress += 100;
+				trackProgress += 10;
 				updateTrackProgress();
-			}, 100);
+			}, 10);
 		} else {
 			updateTrackProgress();
 		}
