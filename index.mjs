@@ -54,7 +54,7 @@ wss.on('connection', async (ws, req) => {
 		}));
 
 		try {
-			const spotifyPlayerHistory = await mongo.db('spotify').collection('spotify-player-history').find({}).sort({ timestamp: -1 }).toArray();
+			const spotifyPlayerHistory = await mongo.db('spotify').collection('spotify-player-history').find({}).sort({ timestamp: -1 }).limit(20).toArray();
 			ws.send(JSON.stringify({
 				type: 'spotify-player-history',
 				data: spotifyPlayerHistory
