@@ -6,7 +6,7 @@ $(document).ready(function() {
 		const seconds = Math.floor(msToSec % 60);
 		return `${Math.floor(msToSec / 60)}:${seconds < 10 ? '0' : ''}${seconds}`;
 	}
-	
+
 	function displayCurrentlyPlaying(data) {
 		let trackProgress = data.progress_ms;
 
@@ -16,22 +16,20 @@ $(document).ready(function() {
 		}
 
 		const updateTrackProgress = () => {
-			const progressPercentage = Math.round((trackProgress / data.item.duration_ms) * 100);
-			$('#track-progress').attr('aria-valuenow', progressPercentage).css('width', `${progressPercentage}%`);
-		
-			const trackTimeText = `${msToMinSec(trackProgress)} / ${msToMinSec(data.item.duration_ms)}`;
-			$('#track-time').text(trackTimeText);
+			const progressPercentage = (trackProgress / data.item.duration_ms) * 100;
+			$('#track-progress').attr('aria-valuenow', progressPercentage.toFixed(2)).css('width', `${progressPercentage.toFixed(2)}%`);
+			$('#track-time').text(`${msToMinSec(trackProgress)} / ${msToMinSec(data.item.duration_ms)}`);
 		};
-		
+
 		if (data.is_playing) {
 			playbackTrackProgress = setInterval(() => {
-				trackProgress += 10;
+				trackProgress += 1000;
 				updateTrackProgress();
-			}, 10);
+			}, 1000);
 		} else {
 			updateTrackProgress();
 		}
-		
+
 		$('#album-image').attr('src', data.item.album.images[1].url);
 		$('#track-name > a').attr('href', data.item.external_urls.spotify).text(data.item.name);
 		$("#track-artists").html(data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', '));
@@ -40,7 +38,7 @@ $(document).ready(function() {
 	function displayPlayerHistory(data) {
 		data.forEach(track => {
 			$('#recently-played').append($('<tr>').append(`
-				<td>${(new Date(track.timestamp)).toLocaleString()}</td>
+				<td>${new Date(track.timestamp).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
 				<td><a href="${track.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.name}</a></td>
 				<td>${track.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
 				<td><a href="${track.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.album.name}</a></td>
@@ -50,7 +48,7 @@ $(document).ready(function() {
 
 	function displayPlayerHistoryUpdate(data) {
 		$('#recently-played').prepend($('<tr>').prepend(`
-			<td>${(new Date(data.timestamp)).toLocaleString()}</td>
+			<td>${new Date(data.timestamp).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
 			<td><a href="${data.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.name}</a></td>
 			<td>${data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
 			<td><a href="${data.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.album.name}</a></td>

@@ -66,7 +66,7 @@ wss.on('connection', async (ws, req) => {
 
 	ws.on('error', (error) => {
 		wssClients.delete(ws);
-		console.error(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) encountered and error (${error.message})`);
+		console.error(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) encountered an error (${error.message})`);
 	});
 
 	ws.on('close', () => {
