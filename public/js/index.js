@@ -30,15 +30,19 @@ $(document).ready(function() {
 			updateTrackProgress();
 		}
 
+		$('#background-image').css({ 'background': `url(${data.item.album.images[1].url}) center/cover no-repeat` });
 		$('#album-image').attr('src', data.item.album.images[1].url);
 		$('#track-name > a').attr('href', data.item.external_urls.spotify).text(data.item.name);
 		$("#track-artists").html(data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', '));
+
 	}
 
 	function displayPlayerHistory(data) {
+
+		$('#recently-played').empty();
+
 		data.forEach(track => {
 			$('#recently-played').append($('<tr>').append(`
-				<td>${new Date(track.timestamp).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
 				<td><a href="${track.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.name}</a></td>
 				<td>${track.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
 				<td><a href="${track.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${track.item.album.name}</a></td>
@@ -48,7 +52,6 @@ $(document).ready(function() {
 
 	function displayPlayerHistoryUpdate(data) {
 		$('#recently-played').prepend($('<tr>').prepend(`
-			<td>${new Date(data.timestamp).toLocaleString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
 			<td><a href="${data.item.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.name}</a></td>
 			<td>${data.item.artists.map(artist => `<a href="${artist.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${artist.name}</a>`).join(', ')}</td>
 			<td><a href="${data.item.album.external_urls.spotify}" target="_blank" class="text-reset text-decoration-none">${data.item.album.name}</a></td>
