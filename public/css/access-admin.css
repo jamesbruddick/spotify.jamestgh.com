@@ -1,0 +1,20 @@
+html {
+  touch-action: manipulation;
+  font-family: 'Roboto', sans-serif;
+}
+body {
+  background-color: #1a1a1a;
+  min-width: 375px;
+}
+#background-image {
+  filter: brightness(50%) blur(16px);
+}
+#session-access-container {
+  background-color: #292929;
+  border: 3px solid #181818;
+  min-width: 300px;
+  max-width: 300px;
+}
+#session-access-title {
+  color: #cfcfcf;
+}

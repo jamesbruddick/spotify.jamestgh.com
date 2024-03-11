@@ -1,0 +1,88 @@
+html {
+  touch-action: manipulation;
+  font-family: 'Roboto', sans-serif;
+}
+body {
+  background-color: #1a1a1a;
+  min-width: 375px;
+}
+#background-image {
+  filter: brightness(50%) blur(16px);
+}
+
+/* Currently Playing CSS */
+#currently-playing-card {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 4px solid #181818;
+}
+#currently-playing-track-name {
+  color: #999;
+}
+#currently-playing-track-artists {
+  color: #666;
+  font-size: 14px;
+}
+#currently-playing-progress-bar {
+  background-color: rgba(255, 255, 255, 0.2);
+  height: 8px;
+}
+#currently-playing-progress {
+  background-color: #1ed760;
+}
+#currently-playing-track-time {
+  color: #666;
+}
+@keyframes scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+.scroll-text:hover {
+  animation: scroll 20s linear forwards;
+}
+
+/* Recently Played CSS */
+#recently-played-card {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 4px solid #1ed760;
+}
+/* #recently-played-card-title {
+  background-color: #1ed760;
+} */
+#recently-played-track-card {
+  background-color: rgba(42, 42, 42, 0.8);
+  border-top: 2px solid #444;
+  border-bottom: 2px solid #444;
+}
+#recently-played-track-name {
+  color: #999;
+  font-size: 20px;
+}
+#recently-played-track-artists {
+  color: #666;
+  font-size: 14px;
+}
+
+/* Main Content CSS */
+#main-content {
+  background-color: rgba(0, 0, 0, 0.8);
+  border: 4px solid #1ed760;
+}
+
+/* Search Track CSS */
+#spotify-search-track-card {
+  background-color: rgba(42, 42, 42, 0.8);
+  border-top: 2px solid #444;
+  border-bottom: 2px solid #444;
+}
+#spotify-search-track-name {
+  color: #999;
+  font-size: 20px;
+}
+#spotify-search-track-artists {
+  color: #666;
+  font-size: 14px;
+}

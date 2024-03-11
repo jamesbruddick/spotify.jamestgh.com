@@ -1,22 +1,39 @@
 import { fileURLToPath } from 'url';
 import path, { dirname } from 'path';
 import express from 'express';
+// import session from 'express-session';
+// import MongoStore from 'connect-mongo';
 import { WebSocket, WebSocketServer } from 'ws';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const { PORT, MONGODB, SPOTIFY_CLIENTID, SPOTIFY_CLIENTSECRET } = process.env;
+const { PORT, MONGODB, SPOTIFY_CLIENTID, SPOTIFY_CLIENTSECRET, SESSION_SECRET } = process.env;
 let SPOTIFY_ACCESSTOKEN, SPOTIFY_ATEXPIRESAT, SPOTIFY_REFRESHTOKEN, SPOTIFY_CURRENTLYPLAYING;
-const wssClients = new Set();
 
 const app = express();
+const mongo = new MongoClient(MONGODB, { serverApi: ServerApiVersion.v1 });
+const wssClients = new Map();
 
 app.locals.pretty = true;
 app.set('trust proxy', true);
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
+// app.use(session({
+// 	secret: SESSION_SECRET,
+// 	cookie: { secure: true, httpOnly: false },
+// 	name: 'spotify-sid',
+// 	resave: false,
+// 	saveUninitialized: true,
+// 	store: MongoStore.create({
+// 		mongoUrl: MONGODB,
+// 		dbName: 'spotify',
+// 		collectionName: 'spotify-sessions',
+// 		autoRemove: 'interval',
+// 		autoRemoveInterval: 1440
+// 	})
+// }));
 app.disable('x-powered-by');
 
 const wss = new WebSocketServer({ 
@@ -25,19 +42,19 @@ const wss = new WebSocketServer({
 	})
 });
 
-const mongo = new MongoClient(MONGODB, { serverApi: ServerApiVersion.v1 });
-
 function generateRandomId(length) {
-	const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+	const characters = '0123456789ABCDEF';
 	return Array.from({ length }, () => characters[Math.floor(Math.random() * characters.length)]).join('');
 }
 
 wss.on('connection', async (ws, req) => {
-	wssClients.add(ws);
+
 	const wssClientId = generateRandomId(16);
 	const wssClientIp = req.headers['x-forwarded-for'].split(',')[0].trim();
 
-	console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) connected`);
+	wssClients.set(wssClientId, ws);
+
+	// console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) connected`);
 
 	setInterval(() => {
 		try {
@@ -48,13 +65,19 @@ wss.on('connection', async (ws, req) => {
 	}, 20e3);
 
 	if (ws.readyState === WebSocket.OPEN) {
+
+		ws.send(JSON.stringify({
+			type: 'ws-client-id',
+			data: wssClientId
+		}));
+
 		ws.send(JSON.stringify({
 			type: 'spotify-currently-playing',
 			data: SPOTIFY_CURRENTLYPLAYING
 		}));
 
 		try {
-			const spotifyPlayerHistory = await mongo.db('spotify').collection('spotify-player-history').find({}).sort({ timestamp: -1 }).limit(20).toArray();
+			const spotifyPlayerHistory = await mongo.db('spotify').collection('spotify-player-history').find({}).sort({ timestamp: -1 }).skip(1).limit(10).toArray();
 			ws.send(JSON.stringify({
 				type: 'spotify-player-history',
 				data: spotifyPlayerHistory
@@ -64,14 +87,35 @@ wss.on('connection', async (ws, req) => {
 		}
 	}
 
+	ws.on('message', async (message) => {
+		const response = JSON.parse(message);
+		switch (response.type) {
+			// case 'session-access-status':
+			// 	await sessionAccessStatus(response.data, response.wsid);
+			// 	break;
+			// case 'session-access-request':
+			// 	await sessionAccessRequest(response.data, response.wsid);
+			// 	break;
+			// case 'session-access-toggle':
+			// 	await sessionAccessToggle(response.data, response.wsid);
+			// 	break;
+			// case 'session-access-admin':
+			// 	await sessionAccessAdmin(response.wsid);
+			// 	break;
+			case 'spotify-search-track':
+				await spotifySearchTrack(response.data, response.wsid);
+				break;
+		}
+	});
+
 	ws.on('error', (error) => {
-		wssClients.delete(ws);
+		wssClients.delete(wssClientId);
 		console.error(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) encountered an error (${error.message})`);
 	});
 
 	ws.on('close', () => {
-		wssClients.delete(ws);
-		console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) disconnected`);
+		wssClients.delete(wssClientId);
+		// console.log(`[${new Date().toISOString()}]: ${wssClientIp} websocket client (${wssClientId}) disconnected`);
 	});
 });
 
@@ -115,7 +159,7 @@ async function refreshSpotifyAccessToken() {
 			throw new Error('Failed to refresh the access_token for Spotify Web API');
 		}
 	} catch (error) {
-		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		console.error(`[${new Date().toISOString()}]: Function refreshSpotifyAccessToken() > ${error.message}`);
 	}
 }
 
@@ -125,7 +169,7 @@ async function setSpotifyAuthorizationTokens() {
 			const spotifyAuthorizationData = await mongo.db('spotify').collection('spotify-authorization').findOne();
 
 			if (!spotifyAuthorizationData) {
-				throw new Error(`Authorize Spotify Web API at https://${__dirname.split('/').pop()}/login`);
+				throw new Error(`Authorize Spotify Web API at https://${__dirname.split('/').pop()}/authorize`);
 			}
 
 			SPOTIFY_ACCESSTOKEN = spotifyAuthorizationData.access_token;
@@ -139,7 +183,7 @@ async function setSpotifyAuthorizationTokens() {
 
 		setTimeout(setSpotifyAuthorizationTokens, (SPOTIFY_ATEXPIRESAT - Date.now()) - 300e3);
 	} catch (error) {
-		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		console.error(`[${new Date().toISOString()}]: Function setSpotifyAuthorizationTokens() > ${error.message}`);
 		return setTimeout(setSpotifyAuthorizationTokens, 60e3);
 	}
 }
@@ -162,6 +206,8 @@ async function saveSpotifyPlayerHistory() {
 			}
 		} else {
 			if (SPOTIFY_CURRENTLYPLAYING.item.uri != spotifyLastPlayed.item.uri) {
+				console.log(`[${new Date().toISOString()}]: Spotify started playing (${SPOTIFY_CURRENTLYPLAYING.item.external_urls.spotify})`);
+
 				try {
 					await mongo.db('spotify').collection('spotify-player-history').insertOne({
 						item: SPOTIFY_CURRENTLYPLAYING.item,
@@ -170,13 +216,15 @@ async function saveSpotifyPlayerHistory() {
 
 					wssClients.forEach(async wsClient => {
 						if (wsClient.readyState === WebSocket.OPEN) {
-							wsClient.send(JSON.stringify({
-								type: 'spotify-player-history-update',
-								data: {
-									item: SPOTIFY_CURRENTLYPLAYING.item,
-									timestamp: SPOTIFY_CURRENTLYPLAYING.timestamp
-								}
-							}));
+							try {
+								const spotifyPlayerHistory = await mongo.db('spotify').collection('spotify-player-history').findOne({}, { sort: { timestamp: -1 }, skip: 1 });
+								wsClient.send(JSON.stringify({
+									type: 'spotify-player-history-update',
+									data: spotifyPlayerHistory
+								}));
+							} catch (error) {
+								console.error(`[${new Date().toISOString()}]: ${error.message}`);
+							}
 						}
 					});
 
@@ -187,7 +235,7 @@ async function saveSpotifyPlayerHistory() {
 			}
 		}
 	} catch (error) {
-		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+		console.error(`[${new Date().toISOString()}]: Function saveSpotifyPlayerHistory() > ${error.message}`);
 	}
 }
 
@@ -217,8 +265,8 @@ async function setSpotifyCurrentlyPlaying() {
 			throw new Error(`Failed to get currently playing from Spotify WEB API (${spotifyResponse.statusText})`);
 		}
 	} catch (error) {
-		console.error(`[${new Date().toISOString()}]: ${error.message}`);
-		return setTimeout(setSpotifyCurrentlyPlaying, 5e3);
+		console.error(`[${new Date().toISOString()}]: Function setSpotifyCurrentlyPlaying() > ${error.message}`);
+		return setTimeout(setSpotifyCurrentlyPlaying, 15e3);
 	}
 
 	setTimeout(setSpotifyCurrentlyPlaying, 1e3);
@@ -226,11 +274,138 @@ async function setSpotifyCurrentlyPlaying() {
 
 await setSpotifyCurrentlyPlaying();
 
-app.get('/', async (req, res) => {
+// async function sessionAccessStatus(spotifySessionID, wsClientId) {
+// 	try {
+// 		const sessionAccessStatus = await mongo.db('spotify').collection('spotify-sessions').findOne({ _id: spotifySessionID });
+
+// 		if (wsClientId) {
+// 			const wsClient = wssClients.get(wsClientId);
+
+// 			if (wsClient.readyState === WebSocket.OPEN) {
+// 				wsClient.send(JSON.stringify({
+// 					type: 'session-access-status',
+// 					data: sessionAccessStatus.authorized
+// 				}));
+// 			}
+	
+// 		} else {
+// 			return sessionAccessStatus.authorized;
+// 		}
+// 	} catch (error) {
+// 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+// 	}
+// }
+
+// async function sessionAccessRequest(sessionData, wsClientId) {
+// 	try {
+// 		await mongo.db('spotify').collection('spotify-sessions').updateOne({ _id: sessionData['spotify-session-id'] }, {
+// 			$set: {
+// 				alias: sessionData['spotify-session-alias'],
+// 				authorized: false
+// 			}
+// 		}, { upsert: true });
+// 	} catch (error) {
+// 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+// 	}
+// }
+
+// async function sessionAccessToggle(sessionData, wsClientId) {
+// 	try {
+// 		await mongo.db('spotify').collection('spotify-sessions').updateOne({ _id: sessionData['spotify-session-id'] }, {
+// 			$set: {
+// 				authorized: sessionData['spotify-session-authorized']
+// 			}
+// 		}, { upsert: true });
+
+// 		await sessionAccessAdmin(wsClientId);
+// 	} catch (error) {
+// 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+// 	}
+// }
+
+// async function sessionAccessAdmin(wsClientId) {
+// 	try {
+// 		const sessionAccessRequested = await mongo.db('spotify').collection('spotify-sessions').find({ alias: { $exists: true } }).toArray();
+
+// 		const wsClient = wssClients.get(wsClientId);
+
+// 		if (wsClient.readyState === WebSocket.OPEN) {
+// 			wsClient.send(JSON.stringify({
+// 				type: 'session-access-requested',
+// 				data: sessionAccessRequested
+// 			}));
+// 		}
+
+// 	} catch (error) {
+// 		console.error(`[${new Date().toISOString()}]: ${error.message}`);
+// 	}
+// }
+
+async function spotifySearchTrack(searchQuery, wsClientId) {
+	try {
+		const requestOptions = {
+			method: 'GET',
+			headers: { 'Authorization': `Bearer ${SPOTIFY_ACCESSTOKEN}` }
+		};
+
+		const spotifyResponse = await fetch(`https://api.spotify.com/v1/search?q=${searchQuery}&type=track`, requestOptions);
+
+		if (spotifyResponse.ok && spotifyResponse.status === 200) {
+			const data = await spotifyResponse.json();
+
+			const wsClient = wssClients.get(wsClientId);
+
+			if (wsClient.readyState === WebSocket.OPEN) {
+				wsClient.send(JSON.stringify({
+					type: 'spotify-search-track-response',
+					data: data.tracks.items
+				}));
+			}
+
+		} else if (spotifyResponse.ok) {
+			throw new Error(`Failed to search tracks from Spotify WEB API (${spotifyResponse.statusText})`);
+		}
+	} catch (error) {
+		console.error(`[${new Date().toISOString()}]: Function spotifySearchTrack() > ${error.message}`);
+	}
+}
+
+// async function checkAuthorization(req, res, next) {
+// 	if (req.url === '/access-admin') {
+// 		const headerAuthorization = req.headers.authorization;
+
+// 		if (!headerAuthorization || new Buffer.from(headerAuthorization.split(' ')[1], 'base64').toString().split(':')[1] !== 'password') {
+// 			res.setHeader('WWW-Authenticate', 'Basic');
+// 			return res.sendStatus(401);
+// 		}
+
+// 		next();
+// 	} else {
+// 		if (await sessionAccessStatus(req.sessionID)) {
+// 			return next();
+// 		} else {
+// 			res.redirect('/access-request');
+// 		}
+// 	}
+// };
+
+app.get('/', (req, res) => {
 	res.sendFile(__dirname + '/views/index.html');
 });
 
-app.get('/login', (req, res) => {
+// app.get('/', checkAuthorization, (req, res) => {
+// 	res.sendFile(__dirname + '/views/index.html');
+// });
+
+// app.get('/access-request', (req, res) => {
+// 	res.sendFile(__dirname + '/views/access-request.html');
+// });
+
+// app.get('/access-admin', checkAuthorization, (req, res) => {
+// 	res.sendFile(__dirname + '/views/access-admin.html');
+// });
+
+app.get('/authorize', (req, res) => {
 	const params = new URLSearchParams({
 		client_id: SPOTIFY_CLIENTID,
 		response_type: 'code',

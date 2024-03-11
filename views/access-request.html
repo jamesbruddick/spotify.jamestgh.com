@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>JamesTGH: Spotify</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" integrity="sha512-jnSuA4Ss2PkkikSOLtYs8BlYIeeIK1h99ty4YfvRPAlzr377vr3CXDb7sb7eEEBYjDtcYj+AjBH3FLv5uSJuXg==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="/css/modified-bootstrap.css">
+    <link rel="stylesheet" href="/css/access-request.css">
+  </head>
+  <body>
+    <div id="background-image" class="position-fixed top-0 left-0 w-100 h-100 z-n1"></div>
+    <div class="position-absolute top-50 start-50 translate-middle d-flex align-items-center z-1">
+      <div id="spotify-access-container" class="w-100 shadow-lg rounded-3 p-4">
+        <div id="spotify-access-title" class="text-center fw-bold fs-3">Request Access</div>
+        <form id="spotify-access-form">
+          <input id="spotify-access-alias" class="form-control mt-3 mb-2" type="text" placeholder="Enter your alias..." minlength="4" maxlength="16" required>
+          <button class="btn w-100" type="submit">Request</button>
+        </form>
+      </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js" integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js" integrity="sha512-nlp9/l96/EpjYBx7EP7pGASVXNe80hGhYAUrjeXnu/fyF5Py0/RXav4BBNs7n5Hx1WFhOEOWSAVjGeC3oKxDVQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="/js/access-request.js"></script>
+  </body>
+</html>
